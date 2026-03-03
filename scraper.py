@@ -1,38 +1,91 @@
-import re
-import sys
+from selenium import webdriver
 from bs4 import BeautifulSoup
-import requests
-def scrap_page(url):
-    content=requests.get(url)
-    parser=BeautifulSoup(content.text,"html.parser")
+from urllib.parse import urljoin
+import sys
+import time
 
-    # Fetching title of the page 
-    if parser.title:
-        print("Title of the page:")
-        print(parser.title.string)
+
+def find_all_html(url):
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless=new")
+    options.add_argument("--ignore-certificate-errors")
+    scraper_driver = webdriver.Chrome(options=options)
+    scraper_driver.get(url)
+    all_html = scraper_driver.page_source
+    scraper_driver.quit()
+    return all_html
+
+
+def parse_html(all_html):
+    my_soup_object = BeautifulSoup(all_html, "html.parser")
+    return my_soup_object
+
+
+def get_title(soup):
+    if soup.title:
+        return soup.title.get_text(strip=True)
     else:
-        print("Title is not found")
-    
-    # Fetching body content of the page 
-    if parser.body:
-        print("Body content of the page:")
-        body_text=(parser.body.get_text(separator=" ",strip=True))
-        print(body_text)
+        return "title is not available"
+
+
+def get_body_text(soup):
+    for tag in soup(["style", "script", "noscript"]):
+        tag.decompose()
+
+    main_content = soup.find("main")
+    if main_content:
+        text = main_content.get_text(separator="\n", strip=True)
     else:
-        print("body not found")
+        text = soup.body.get_text(separator="\n", strip=True)
 
-    # Fetching all link of the page points link to
-    if parser.a:
-        print("Getting all url:")
-        for links in parser.find_all('a'):
-            href=links.get('href')
-            if href:
-                print(href)
-    else:
-        print("No link is pointing to this page")
+    return text
 
-url=sys.argv[1]
-scrap_page(url)
+
+
+
+def get_all_links(soup, base_url):
+
+    links = set()
+    anchor_tags = soup.find_all("a")
+    for tag in anchor_tags:
+
+        href = tag.get("href")
+
+        if href == None:
+            continue
+
+        full_url = urljoin(base_url, href)
+        if full_url.startswith("http://"):
+            links.add(full_url)
+
+        elif full_url.startswith("https://"):
+            links.add(full_url)
+
+    return links
+
+
+
 
     
-    
+url = sys.argv[1]
+
+if not url[0:4]=="http":
+    url = "https://" + url
+
+print("Extracting all html..")
+all_html = find_all_html(url) 
+my_soup_object = parse_html(all_html)
+title = get_title(my_soup_object) 
+body = get_body_text(my_soup_object)
+outlinks = get_all_links(my_soup_object, url)
+
+print("title:")
+print(title)
+time.sleep(2)
+print("\nBody Text:")
+print(body)
+time.sleep(2)
+print("\nOutlinks:")
+for link in outlinks:
+    print(link)
+
